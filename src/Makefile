@@ -30,7 +30,8 @@ include config.mk
 
 # Add your application here:
 
-APPLICATION = darkshell
+#APPLICATION = darkshell
+APPLICATION = game
 #APPLICATION = coremark
 #APPLICATION = badapple
 #APPLICATION = mandelbrot
@@ -142,6 +143,12 @@ endif
 	rm $(PROJ).bin
 	# uncomment for MIF file
 	#awk 'BEGIN { print "DEPTH = 1024;\nWIDTH = 32;\nADDRESS_RADIX = HEX;\nDATA_RADIX = HEX;\nCONTENT\nBEGIN" } { printf("%08x : %s\n",NR-1,$1); } END { print "END;" }' < $(PROJ).mem > $(PROJ).mif
+    
+	# Generate COE file for Vivado
+	echo "memory_initialization_radix=16;" > $(PROJ).coe
+	echo "memory_initialization_vector=" >> $(PROJ).coe
+	cat $(PROJ).mem | sed 's/$$/,/' | sed '$$s/,/;/ ' >> $(PROJ).coe
+
 	wc -l $@
 	@echo mem ok for $(ENDIAN)-endian.
 	

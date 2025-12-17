@@ -290,6 +290,7 @@
 
 // The board is automatically defined in the xst/xise files via Makefile or
 // ISE. Case it is not the case, please define you board name here:
+`define NEXYS_A7_100T
 //`define AVNET_MICROBOARD_LX9
 //`define XILINX_AC701_A200
 //`define QMTECH_SDRAM_LX16
@@ -497,6 +498,16 @@
 `ifdef DE10NANO_CYCLONEV_MISTER
     `define BOARD_ID 20
     `define BOARD_CK 50000000
+`endif
+
+`ifdef NEXYS_A7_100T
+    `define BOARD_ID 21
+    `define BOARD_CK 100000000
+    `define INVRES 1
+    `define XILINX7CLK 1
+    `define BOARD_CK_REF 100000000
+    `define BOARD_CK_MUL 8
+    `define BOARD_CK_DIV 8
 `endif
 
 `ifndef BOARD_ID

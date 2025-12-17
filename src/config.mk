@@ -34,13 +34,14 @@ ifndef HOST_CC
 endif
 
 ifndef CROSS
-    export CROSS = riscv32-embedded-elf
-    #export CROSS = riscv64-unknown-elf
+    #export CROSS = riscv32-embedded-elf
+    export CROSS = riscv64-unknown-elf
     #export CROSS = riscv32-unknown-elf
     #export CROSS = riscv-elf
     #export CROSS = riscv32-unknown-elf
 
-    export CCPATH = /usr/local/share/gcc-$(CROSS)/bin
+    #export CCPATH = /usr/local/share/gcc-$(CROSS)/bin
+    export CCPATH = /usr/bin
     #export CCPATH = /usr/local/bin
     #export CCPATH = /opt/riscv/bin
     #export CCPATH = /usr/local/share/toolchain-$(CROSS)/bin

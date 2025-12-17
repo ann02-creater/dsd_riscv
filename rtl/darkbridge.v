@@ -127,6 +127,7 @@ module darkbridge
         .DRD    (DRD),
         .DDREQ  (DDREQ),
         .DDACK  (DDACK),
+        .DLEN   (), // Unconnected
         .BERR   (1'b0),
 
 `ifdef SIMULATION

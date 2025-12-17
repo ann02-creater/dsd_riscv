@@ -63,18 +63,25 @@ module darksocv
 
 `endif
 
-    output [31:0] LED,       // on-board leds
-    input  [31:0] IPORT,
-    output [31:0] OPORT,
-    output [3:0]  DEBUG      // osciloscope
+    output [15:0] LED,       // on-board leds (Reduced to 16)
+    input  [15:0] SW,        // Switches mapped to lower IPORT
+    // output [31:0] OPORT,  // Removed external OPORT
+    // output [3:0]  DEBUG,  // Removed DEBUG
+    
+    output [7:0]  SEG,        // 7-segment segments
+    output [7:0]  AN          // 7-segment anodes
 );
 
-    wire [31:0] iport;
-    wire [31:0] oport;
-    assign OPORT = oport;
-`ifndef SPIBB
-    assign iport = IPORT;
-`endif
+    wire [31:0] iport = {16'h0000, SW}; // Pad switches to 32-bit IPORT
+    wire [31:0] oport;      // Internal OPORT
+    wire [31:0] led_32;     // Internal 32-bit LED signal
+    
+    // Connect lower 16 bits of 32-bit LED output to physical LEDs
+    assign LED = led_32[15:0];
+
+
+
+
 `ifdef SPI
     wire spi_csn;   // SPI CSN output (active LOW)
     wire spi_sck;   // SPI clock output
@@ -82,9 +89,8 @@ module darksocv
     assign SPI_CSN = spi_csn;
     assign SPI_SCK = spi_sck;
 `endif
-    // clock and reset
+   
 
-    wire CLK,RES;
 
 `ifdef BOARD_CK
     
@@ -241,47 +247,33 @@ module darksocv
     wire spihw_mosi;  // SPI master data output, slave data input
     wire spihw_miso;  // SPI master data input, slave data output
 `endif
-    darkio
-`ifdef SPI
-    #(.SPI_DIV_COEF(SPI_DIV_COEF))
-`endif
-    io0 (
-        .CLK    (CLK),
-        .RES    (RES),
-        .HLT    (HLT),
+    // io block w/ CS==1
+    
+    wire IO_IRQ; // internal IO interrupt (1 bit)
 
-`ifdef __INTERRUPT__
-        .XIRQ    (XIRQ),
-`endif
-       
-        .XDREQ  (XDREQMUX[1]),
-        .XRD    (XRD),
-        .XWR    (XWR),
-        .XBE    (XBE),
-        .XADDR  (XADDR),
-        .XATAI  (XATAO),
-        .XATAO  (XATAIMUX[1]),
-        .XDACK  (XDACKMUX[1]),        
+    darkio io0
+    (
+        .CLK(CLK),
+        .RES(RES),
+        .HLT(HLT),
         
-        .RXD    (UART_RXD),
-        .TXD    (UART_TXD),
+        .XDREQ(XDREQMUX[1]),
+        .XWR(XWR),
+        .XRD(XRD),
+        .XBE(XBE),
+        .XADDR(XADDR),
+        .XATAI(XATAO),
+        .XATAO(XATAIMUX[1]),
+        .XDACK(XDACKMUX[1]),
+        .XIRQ(IO_IRQ),
 
-`ifdef SPI
-        .SCK    (spihw_sck),
-        .MOSI(SPI_MOSI),
-        .MISO   (SPI_MISO),
-        .CSN    (spihw_csn),
-`endif
-        .LED    (LED),
-        .IPORT  (iport),
-        .OPORT  (oport),
-
-`ifdef SIMULATION
-        .ESIMREQ(ESIMREQ),
-        .ESIMACK(ESIMACK),
-`endif
-
-        .DEBUG  (IODEBUG)
+        .RXD(UART_RXD),
+        .TXD(UART_TXD),
+        
+        .LED(led_32),
+        .IPORT(iport),
+        .OPORT(oport),
+        .DEBUG()
     );
 
     // sdram w/ CS==2
@@ -404,6 +396,15 @@ module darksocv
 `endif
 `endif
 
-    assign DEBUG = KDEBUG;
+    // assign DEBUG = KDEBUG; // Removed
+
+    // 7-Segment Controller Instantiation
+    darkseg seg0 (
+        .CLK(CLK),
+        .RES(RES),
+        .DATA(oport), // Display OPORT value
+        .SEG(SEG),
+        .AN(AN)
+    );
 
 endmodule
