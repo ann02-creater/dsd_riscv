@@ -15,7 +15,7 @@ module darkseg
     output [7:0]  AN         // Anodes (AN0-AN7)
 );
 
-    reg [16:0] PRESCALER = 0; // 100MHz / 2^17 ~= 762Hz refresh rate
+    reg [16:0] PRESCALER = 0; // 100MHz 
     reg [2:0]  DIGIT_SEL = 0; // Current digit (0-7)
 
     always @(posedge CLK) begin

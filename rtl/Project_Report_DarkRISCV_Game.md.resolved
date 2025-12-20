@@ -1,0 +1,75 @@
+# 프로젝트 최종 보고서: DarkRISCV 기반 짝/홀수 게임 시스템 구현
+
+**작성자:** [작성자 성명]  
+**작성일:** 2025년 12월 17일  
+**수신:** 전자공학과 교수님
+
+---
+
+## 1. 개요 (Overview)
+
+본 프로젝트의 목표는 **Xilinx Artix-7 FPGA (Nexys A7-100T)** 위에 오픈 소스 RISC-V 프로세서인 **DarkRISCV**를 포팅하고, 이를 기반으로 **UART 통신과 7-Segment Display**를 연동하여 사용자가 입력한 숫자의 짝수/홀수 여부를 판별하는 게임 시스템을 구축하는 것입니다.
+
+초기 시도였던 이전 프로젝트(`25-2-dsd`)에서의 실패 원인을 분석하고, 이를 수정하여 완성된 현재 프로젝트(`darkriscv`)의 개선 사항과 개발 과정을 상세히 기술합니다.
+
+---
+
+## 2. 이전 프로젝트(`25-2-dsd`) 실패 분석
+
+### 2.1 하드웨어 로직의 상태
+이전 프로젝트는 5-stage RISC-V 파이프라인([data_path.v](file:///mnt/c/Users/anchovy1st/darkriscv/temp_analysis_25_2_dsd/d2/data_path.v), [control_unit.v](file:///mnt/c/Users/anchovy1st/darkriscv/temp_analysis_25_2_dsd/d2/control_unit.v)) 등 핵심 하드웨어 로직은 정상적으로 설계되어 있었습니다. 시뮬레이션 상에서는 CPU가 인스트럭션을 인출하고 실행하는 동작에 문제가 없었습니다.
+
+### 2.2 결정적 실패 원인: 부적절한 COE 컴파일러 및 툴체인 사용
+가장 치명적인 문제는 **소프트웨어 빌드 및 메모리 초기화 파일(COE) 생성 과정**에 있었습니다.
+
+1.  **Linker Script 및 Startup Code 부재:**  
+    이전 프로젝트의 [main.c](file:///mnt/c/Users/anchovy1st/darkriscv/src/game/main.c)는 `darkriscv`가 요구하는 메모리 맵(0x0000_0000부터 실행)에 맞춰져 있지 않았고, 스택 포인터(SP) 초기화나 BSS 영역 초기화를 수행하는 **Startup Code ([boot.S](file:///mnt/c/Users/anchovy1st/darkriscv/src/boot.S))**가 누락되어 있었습니다. 이로 인해 C 코드가 하드웨어 위에서 정상적으로 실행될 수 없는 상태였습니다.
+    
+2.  **단순 바이너리 변환 (Hex2Coe)의 한계:**  
+    이전에는 단순한 Python 스크립트(`hex2coe.py`)를 사용하여 컴파일된 바이너리를 텍스트로 변환했습니다. 이 과정에서 **Word Alignment(32-bit 정렬)**나 **Endianness(리틀 엔디안)** 처리가 DarkRISCV의 BRAM 구조와 정확히 일치하지 않아, CPU가 엉뚱한 데이터를 명령어로 인식하는 결과를 초래했습니다.
+
+결과적으로 하드웨어는 정상이었으나, 그 위에서 돌아갈 **펌웨어(이미지)가 깨진 상태**로 업로드되었기 때문에 동작하지 않았습니다.
+
+---
+
+## 3. 현재 프로젝트(`darkriscv`)의 해결 방안 및 완성 과정
+
+### 3.1 DarkRISCV 표준 빌드 시스템 도입
+현재 프로젝트는 DarkRISCV 원본 리포지토리의 **Makefile 기반 빌드 시스템**을 채택하여 소프트웨어 문제를 완벽히 해결했습니다.
+
+*   **올바른 툴체인:** `riscv64-unknown-elf-gcc`를 사용하여 `march=rv32i` 옵션으로 정확하게 컴파일했습니다.
+*   **Startup Code 통합:** [src/boot.S](file:///mnt/c/Users/anchovy1st/darkriscv/src/boot.S)를 포함하여 리셋 후 스택 초기화 및 [main()](file:///mnt/c/Users/anchovy1st/darkriscv/temp_analysis_25_2_dsd/d2/main.c#9-30) 함수 호출 과정을 정상화했습니다.
+*   **검증된 COE 생성:** `objcopy`와 `sed`를 결합한 표준 방식으로, Vivado BRAM IP가 정확히 인식할 수 있는 포맷의 [.coe](file:///mnt/c/Users/anchovy1st/darkriscv/src/test.coe) 파일을 생성했습니다.
+
+### 3.2 개발 단계별 진행 과정 (Milestones)
+
+1.  **환경 구축 및 타겟 보드 포팅 (Porting):**
+    *   DarkRISCV RTL 코드를 Nexys A7-100T 보드에 맞게 수정했습니다.
+    *   [config.vh](file:///mnt/c/Users/anchovy1st/darkriscv/rtl/config.vh)에서 `NEXYS_A7_100T` 매크로를 정의하여 클럭 시스템(100MHz)과 리셋 로직(`Active Low`)을 보드 사양에 맞췄습니다. (초기 단계에서 리셋 극성 반대로 인한 동작 실패를 겪었으나 수정됨)
+
+2.  **IP (Intellectual Property) 교체 및 통합:**
+    *   프로젝트의 목적에 맞춰 입출력 주변장치(Peripheral IP)를 대대적으로 변경했습니다.
+
+| 구분 | 이전 프로젝트 (`25-2-dsd`) | 현재 프로젝트 (`darkriscv`) | 변경 사유 및 효과 |
+| :--- | :--- | :--- | :--- |
+| **입력 장치** | PS/2 키보드 ([ps2_kbd_top.v](file:///mnt/c/Users/anchovy1st/darkriscv/temp_analysis_25_2_dsd/d2/ps2_kbd_top.v)) | **UART (USB Serial)** | 하드웨어 복잡도를 낮추고 PC 터미널과의 호환성 확보 |
+| **출력 장치** | VGA 컨트롤러 ([vga_text_display.v](file:///mnt/c/Users/anchovy1st/darkriscv/temp_analysis_25_2_dsd/d2/vga_text_display.v)) | **7-Segment & UART Echo** | 직관적인 숫자 표시 및 디버깅 용이성 증대 |
+| **메모리(RAM)** | 수동 인스턴스화 BRAM | **Xilinx BRAM IP (IP Catalog)** | [.coe](file:///mnt/c/Users/anchovy1st/darkriscv/src/test.coe) 파일을 통한 초기화 안정성 확보 및 Vivado 호환성 강화 |
+| **인터페이스** | 커스텀 MMIO | **DarkIO (표준)** | DarkRISCV 표준 IO 맵을 따라 C 코드 호환성 유지 |
+
+3.  **게임 로직 구현 ([src/game/main.c](file:///mnt/c/Users/anchovy1st/darkriscv/src/game/main.c)):**
+    *   UART 레지스터(`0x40000004`)를 통해 사용자 키 입력을 수신.
+    *   7-Segment 레지스터(`0x40000018`)에 누적된 숫자를 실시간 표시.
+    *   Button/Enter 입력 시 홀/짝 판별 후, LED(`0x40000008`) 제어 및 결과 메시지 출력.
+
+4.  **최종 검증 (Verification):**
+    *   TeraTerm을 통한 입출력 테스트 완료.
+    *   FPGA 보드 상에서 숫자 입력 시 7-Segment 표시 및 홀/짝 판별 LED 동작 확인.
+
+---
+
+## 4. 결론
+
+본 프로젝트는 단순한 하드웨어 설계를 넘어, **"하드웨어(RTL)와 소프트웨어(Firmware)의 인터페이스"**가 얼마나 중요한지 보여주는 사례입니다.
+
+이전 프로젝트의 실패는 하드웨어 결함이 아니라 **컴파일러와 메모리 이미지 생성 과정(COE)의 불일치**에서 비롯되었습니다. 이번 프로젝트에서는 검증된 빌드 시스템과 표준화된 IP(`darkuart`, `darkseg`)를 사용하여 이러한 문제를 해결하고, 최종적으로 Nexys A7 보드 위에서 안정적으로 동작하는 임베디드 RISC-V 시스템을 완성했습니다.

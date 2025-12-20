@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DarkRISCV 동작 원리 및 데이터 흐름</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({startOnLoad:true});</script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .slide { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 2rem; border-bottom: 1px solid #eee; }
+        .code-block { background: #1e1e1e; color: #d4d4d4; padding: 1.5rem; border-radius: 0.5rem; font-family: monospace; overflow-x: auto; }
+        .highlight { color: #569cd6; font-weight: bold; }
+        .comment { color: #6a9955; }
+        .diagram-container { background: white; padding: 2rem; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; justify-content: center; }
+        .step-box { border-left: 4px solid #3b82f6; padding-left: 1rem; margin-bottom: 1.5rem; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+
+    <!-- Title Slide -->
+    <div class="slide bg-white text-center">
+        <h1 class="text-6xl font-extrabold text-blue-600 mb-4">DarkRISCV 동작 원리</h1>
+        <h2 class="text-3xl font-semibold text-gray-600">uprint 함수와 데이터 흐름 분석</h2>
+        <div class="mt-12">
+            <p class="text-xl text-gray-500">CPU, Bus, Memory, IO의 상호 작용</p>
+        </div>
+    </div>
+
+    <!-- System Overview -->
+    <div class="slide">
+        <h2 class="text-4xl font-bold mb-8 border-b pb-4">1. 시스템 전체 구조 (SoC Overview)</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <div>
+                <p class="text-lg mb-6 leading-relaxed">
+                    DarkRISCV SoC는 <strong>CPU 코어</strong>, <strong>시스템 버스(Bridge)</strong>, 
+                    <strong>메모리(RAM)</strong>, 그리고 <strong>입출력 제어기(IO)</strong>로 구성됩니다.
+                </p>
+                <div class="space-y-4">
+                    <div class="step-box">
+                        <h3 class="font-bold text-xl">CPU (DarkRISCV)</h3>
+                        <p>명령어를 실행하고 주소와 데이터를 생성합니다.</p>
+                    </div>
+                    <div class="step-box" style="border-color: #10b981;">
+                        <h3 class="font-bold text-xl">Bridge (DarkBridge)</h3>
+                        <p>CPU의 요청 주소를 보고 메모리(0x0...)로 갈지, IO(0x4...)로 갈지 교통 정리를 합니다.</p>
+                    </div>
+                    <div class="step-box" style="border-color: #f59e0b;">
+                        <h3 class="font-bold text-xl">IO (DarkIO)</h3>
+                        <p>UART, LED, 7-Segment 등 주변 장치를 제어합니다.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="diagram-container">
+                <!-- 이미지는 사용자가 다운로드 받은 경로에 있어야 함. 여기서는 아티팩트 경로를 직접 참조할 수 없으므로 파일명만 기재하거나 상대경로 사용 -->
+                <!-- 사용자가 이미지를 같은 폴더에 넣어야 함을 안내 -->
+                <div class="text-center">
+                    <p class="text-gray-400 mb-2">[시스템 아키텍처 다이어그램]</p>
+                    <div class="mermaid">
+                        graph TD
+                        CPU[DarkRISCV Core]
+                        Bus[DarkBridge System Bus]
+                        RAM[Block RAM Memory]
+                        IO[IO Controller]
+                        UART[UART Module]
+                        Seg[7-Segment]
+                        
+                        CPU <==>|ADDR/DATA| Bus
+                        Bus <==>|0x0000...| RAM
+                        Bus <==>|0x4000...| IO
+                        
+                        IO -->|0x..04| UART
+                        IO -->|0x..18| Seg
+                        
+                        style CPU fill:#e1f5fe,stroke:#01579b
+                        style Bus fill:#fff3e0,stroke:#e65100
+                        style RAM fill:#e8f5e9,stroke:#1b5e20
+                        style IO fill:#f3e5f5,stroke:#4a148c
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Code Analysis -->
+    <div class="slide bg-gray-100">
+        <h2 class="text-4xl font-bold mb-8">2. 분석할 코드 (uprint)</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="code-block text-sm">
+<span class="comment"># uprint 함수 어셈블리 코드</span>
+uprint:
+    <span class="comment"># a0 = 문자열 시작 주소</span>
+<span class="highlight">loop:</span>
+    <span class="highlight">lbu   a1, 0(a0)</span>       <span class="comment"># 1. 메모리 읽기 (Fetch Char)</span>
+    <span class="highlight">beqz  a1, done</span>        <span class="comment"># 2. 종료 조건 확인 (Branch)</span>
+    
+    <span class="comment"># uwrite(a1) 인라인</span>
+    li    t0, 0x40000004  <span class="comment"># UART 주소</span>
+<span class="highlight">wait:</span>
+    lw    t1, 0(t0)       <span class="comment"># 3. UART 상태 읽기 (IO Read)</span>
+    andi  t1, t1, 1      
+    bnez  t1, wait       
+    
+    slli  a1, a1, 8       
+    <span class="highlight">sw    a1, 0(t0)</span>       <span class="comment"># 4. UART 출력 (IO Write)</span>
+    
+    addi  a0, a0, 1       
+    j     loop
+            </div>
+            <div class="flex flex-col justify-center space-y-6">
+                <p class="text-xl">이 코드는 크게 <strong>4가지 핵심 동작</strong>으로 나뉩니다:</p>
+                <ol class="list-decimal list-inside text-lg space-y-3 pl-4">
+                    <li><strong>LBU</strong>: 메모리에서 데이터 가져오기</li>
+                    <li><strong>BEQZ</strong>: 조건에 따라 흐름 제어하기</li>
+                    <li><strong>LW</strong>: 주변 장치 상태 확인하기</li>
+                    <li><strong>SW</strong>: 주변 장치에 데이터 보내기</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 1: Memory Read -->
+    <div class="slide">
+        <h2 class="text-4xl font-bold mb-8 text-blue-700">Step 1: 메모리 읽기 (LBU)</h2>
+        <p class="text-xl mb-6 text-gray-600">CPU가 메모리의 문자열 영역에서 문자 'E'를 읽어오는 과정입니다.</p>
+        
+        <div class="diagram-container">
+            <div class="mermaid">
+                sequenceDiagram
+                    participant CPU as DarkRISCV (CPU)
+                    participant Bridge as DarkBridge
+                    participant RAM as DarkRAM (Memory)
+
+                    Note over CPU: lbu a1, 0(a0) 실행
+                    CPU->>Bridge: DADDR=0x380 (문자열 주소), DRD=1
+                    Note right of Bridge: 주소 0x... 확인<br/>-> RAM 선택
+                    Bridge->>RAM: XADDR=0x380, XRD=1
+                    RAM-->>Bridge: 데이터 'E' (0x45) 반환
+                    Bridge-->>CPU: DATAI = 0x45
+                    Note over CPU: 레지스터 a1에<br/>0x45 저장
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 2: Branch -->
+    <div class="slide bg-gray-50">
+        <h2 class="text-4xl font-bold mb-8 text-purple-700">Step 2: 분기 판단 (BEQZ)</h2>
+        <p class="text-xl mb-6 text-gray-600">읽어온 문자가 NULL(0)인지 확인하고, 프로그램 흐름을 변경합니다.</p>
+        
+        <div class="flex justify-center">
+            <div class="mermaid">
+                flowchart LR
+                    A[Start BEQZ] --> B{a1 == 0?}
+                    B -- Yes (NULL) --> C[PC = done 주소]
+                    C --> D[Loop 종료]
+                    B -- No ('E') --> E[PC = PC + 4]
+                    E --> F[다음 명령어 실행]
+                    
+                    style A fill:#f9f,stroke:#333
+                    style B fill:#ffe,stroke:#f66
+                    style F fill:#bfb,stroke:#333
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 3: IO Write -->
+    <div class="slide">
+        <h2 class="text-4xl font-bold mb-8 text-red-700">Step 4: UART 출력 (SW)</h2>
+        <p class="text-xl mb-6 text-gray-600">CPU가 UART 장치에 데이터를 써서 텍스트를 출력하는 과정입니다.</p>
+        
+        <div class="diagram-container">
+            <div class="mermaid">
+                sequenceDiagram
+                    participant CPU as DarkRISCV
+                    participant Bridge as DarkBridge
+                    participant IO as DarkIO
+                    participant UART as DarkUART
+                    participant TX as TX Pin
+
+                    Note over CPU: sw a1, 0(t0) 실행
+                    CPU->>Bridge: DADDR=0x40000004, DATAO='E', DWR=1
+                    Note right of Bridge: 주소 0x4... 확인<br/>-> IO 선택
+                    Bridge->>IO: XADDR=...04, XATAO='E', XWR=1
+                    Note right of IO: 주소 끝자리 04 확인<br/>-> UART 선택
+                    IO->>UART: WR=1, DATAI='E'
+                    UART->>TX: 직렬 데이터 전송 (Start, E, Stop)
+            </div>
+        </div>
+    </div>
+
+    <!-- Conclusion -->
+    <div class="slide text-center bg-gray-900 text-white">
+        <h2 class="text-5xl font-bold mb-8">결론</h2>
+        <p class="text-2xl mb-12 leading-relaxed max-w-4xl mx-auto">
+            "uprint 함수 하나를 실행하기 위해<br>
+            <span class="text-yellow-400">CPU, Bridge, Memory, IO</span>가 유기적으로 협력합니다."
+        </p>
+        <div class="grid grid-cols-3 gap-8 max-w-5xl mx-auto text-left">
+            <div class="p-6 border border-gray-700 rounded hover:bg-gray-800 transition">
+                <h3 class="text-xl font-bold text-blue-400 mb-2">Memory Access</h3>
+                <p>LBU 명령어로 프로그램과 데이터를 정확히 가져옵니다.</p>
+            </div>
+            <div class="p-6 border border-gray-700 rounded hover:bg-gray-800 transition">
+                <h3 class="text-xl font-bold text-purple-400 mb-2">Flow Control</h3>
+                <p>BEQZ 명령어로 논리적인 판단을 수행합니다.</p>
+            </div>
+            <div class="p-6 border border-gray-700 rounded hover:bg-gray-800 transition">
+                <h3 class="text-xl font-bold text-red-400 mb-2">IO Control</h3>
+                <p>SW 명령어로 외부 세상(UART)과 소통합니다.</p>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
